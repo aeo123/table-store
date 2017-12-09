@@ -1,17 +1,24 @@
 package com.hannea.tablestore;
 
 import com.hannea.constant.PrimaryKeyTypeObject;
+import com.hannea.constant.PrimaryKeyTypeOption;
 
 public class PrimaryKeyValueObject {
 	private Object value;
-	private byte[] rawData; // raw bytes for utf-8 string
+	// raw bytes for utf-8 string
+	private byte[] rawData;
 	private PrimaryKeyTypeObject type;
-	private int sort;//从0开始越到越后，保证主键顺序
+	private PrimaryKeyTypeOption option;
+	/**
+	 * 从0开始越到越后，保证主键顺序
+	 */
+	private int sort;
 
-	public PrimaryKeyValueObject(Object value, PrimaryKeyTypeObject type,int sort) {
+	public PrimaryKeyValueObject(Object value, PrimaryKeyTypeObject type, PrimaryKeyTypeOption option, int sort) {
 		super();
 		this.value = value;
 		this.type = type;
+		this.option=option;
 		this.sort = sort;
 	}
 
@@ -45,5 +52,13 @@ public class PrimaryKeyValueObject {
 
 	public void setType(PrimaryKeyTypeObject type) {
 		this.type = type;
+	}
+
+	public PrimaryKeyTypeOption getOption() {
+		return option;
+	}
+
+	public void setOption(PrimaryKeyTypeOption option) {
+		this.option = option;
 	}
 }

@@ -11,6 +11,7 @@ import com.hannea.annotation.TableColumn;
 import com.hannea.annotation.TableEntity;
 import com.hannea.annotation.TableKey;
 import com.hannea.constant.ColumnTypeObject;
+import com.hannea.constant.PrimaryKeyTypeOption;
 import com.hannea.tablestore.*;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -20,9 +21,11 @@ import java.lang.reflect.Field;
 import java.util.*;
 
 
+
 /**
  * Class
  * 调用之前必须调用initTable 进行设置，否则会出现问题
+ *
  * @author wgm
  * @date 2017/11/03
  */
@@ -60,6 +63,9 @@ public abstract class TableStoreService implements ITableStoreService {
         List<Column> list = new ArrayList<Column>();
         for (String ck : column.keySet()) {
             ColumnValueObject cv = column.get(ck);
+            if (cv.getValue() == null) {
+                continue;
+            }
             Column c = null;
             switch (cv.getType()) {
                 case INTEGER:
@@ -92,7 +98,7 @@ public abstract class TableStoreService implements ITableStoreService {
         for (String ck : column.keySet()) {
             ColumnValueObject cv = column.get(ck);
             Column c = null;
-            if(cv.getValue() == null){
+            if (cv.getValue() == null) {
                 continue;
             }
             switch (cv.getType()) {
@@ -121,6 +127,15 @@ public abstract class TableStoreService implements ITableStoreService {
         return list;
     }
 
+
+
+    /**
+     *@Description:  增加对自增主键的操作
+     *@Param: [primaryKey]
+     *@return: com.alicloud.openservices.tablestore.model.PrimaryKey
+     *@Author:aeo
+     *@Date: create in 19:04 2017-12-09
+     **/
     private PrimaryKey buildKey(Map<String, PrimaryKeyValueObject> primaryKey) {
         // 主键
         int size = primaryKey.size();
@@ -130,19 +145,24 @@ public abstract class TableStoreService implements ITableStoreService {
             PrimaryKeyValueObject pkv = primaryKey.get(pk);
             switch (pkv.getType()) {
                 case INTEGER:
-                    PrimaryKeyValue valueInt= PrimaryKeyValue.fromLong(Long.valueOf(String.valueOf(pkv.getValue())));
-                    Preconditions.checkArgument(pk != null && !pk.isEmpty(), "The name of primary key should not be null or empty.");
-                    Preconditions.checkNotNull(valueInt, "The value of primary key should not be null.");
-                    arr[pkv.getSort()] = new PrimaryKeyColumn(pk, valueInt);
+                    //插入自增主键的时候pk一定要为null，其余操作的时候一定不为null，否则会失败
+                    if (pkv.getOption() == PrimaryKeyTypeOption.AUTO_INCREMENT && pkv.getValue()==null){
+                        arr[pkv.getSort()] = new PrimaryKeyColumn(pk, PrimaryKeyValue.AUTO_INCREMENT);
+                    }else{
+                        PrimaryKeyValue valueInt = PrimaryKeyValue.fromLong(Long.valueOf(String.valueOf(pkv.getValue())));
+                        Preconditions.checkArgument(pk != null && !pk.isEmpty(), "The name of primary key should not be null or empty.");
+                        Preconditions.checkNotNull(valueInt, "The value of primary key should not be null.");
+                        arr[pkv.getSort()] = new PrimaryKeyColumn(pk, valueInt);
+                    }
                     break;
                 case STRING:
-                    PrimaryKeyValue valueStr= PrimaryKeyValue.fromString(String.valueOf(pkv.getValue()));
+                    PrimaryKeyValue valueStr = PrimaryKeyValue.fromString(String.valueOf(pkv.getValue()));
                     Preconditions.checkArgument(pk != null && !pk.isEmpty(), "The name of primary key should not be null or empty.");
                     Preconditions.checkNotNull(valueStr, "The value of primary key should not be null.");
                     arr[pkv.getSort()] = new PrimaryKeyColumn(pk, valueStr);
                     break;
                 case BINARY:
-                    PrimaryKeyValue valueBinary= PrimaryKeyValue.fromString(String.valueOf(pkv.getValue()));
+                    PrimaryKeyValue valueBinary = PrimaryKeyValue.fromString(String.valueOf(pkv.getValue()));
                     Preconditions.checkArgument(pk != null && !pk.isEmpty(), "The name of primary key should not be null or empty.");
                     Preconditions.checkNotNull(valueBinary, "The value of primary key should not be null.");
                     arr[pkv.getSort()] = new PrimaryKeyColumn(pk, valueBinary);
@@ -233,9 +253,9 @@ public abstract class TableStoreService implements ITableStoreService {
 
     public boolean putRow(String tableName, Map<String, PrimaryKeyValueObject> primaryKey,
                           Map<String, ColumnValueObject> column) {
-        if(StringUtils.isBlank(tableName)){
-                logger.error("[putRow] you need set table name first,put error");
-                return false;
+        if (StringUtils.isBlank(tableName)) {
+            logger.error("[putRow] you need set table name first,put error");
+            return false;
         }
         PrimaryKey primaryKeys = buildKey(primaryKey);
         RowPutChange rowPutChange = new RowPutChange(tableName, primaryKeys);
@@ -253,10 +273,10 @@ public abstract class TableStoreService implements ITableStoreService {
     }
 
     public boolean putRowSelective(String tableName, Map<String, PrimaryKeyValueObject> primaryKey,
-                          Map<String, ColumnValueObject> column) {
-        if(StringUtils.isBlank(tableName)){
-                logger.error("[putRowSelective] you need set table name first,put error");
-                return false;
+                                   Map<String, ColumnValueObject> column) {
+        if (StringUtils.isBlank(tableName)) {
+            logger.error("[putRowSelective] you need set table name first,put error");
+            return false;
         }
         PrimaryKey primaryKeys = buildKey(primaryKey);
         RowPutChange rowPutChange = new RowPutChange(tableName, primaryKeys);
@@ -284,7 +304,7 @@ public abstract class TableStoreService implements ITableStoreService {
             return false;
         }
         Column[] cols = rows.getColumns();
-        Map<String, ColumnValueObject> v = new LinkedHashMap<>();
+        Map<String, ColumnValueObject> v = new LinkedHashMap<String, ColumnValueObject>();
         for (Column c : cols) {
             ColumnValue cv = c.getValue();
             ColumnValueObject cvo = null;
@@ -346,54 +366,64 @@ public abstract class TableStoreService implements ITableStoreService {
         return r.getRequestId() != null;
     }
 
+
+    /**
+     *@Description: 增加对自增主键的操作
+     *@Param: [tableName, object]
+     *@return: com.hannea.tablestore.StoreTableRow
+     *@Author:aeo
+     *@Date: create in 19:05 2017-12-09
+     **/
     @Override
-    public StoreTableRow initTable(String tableName,Object object) {
+    public StoreTableRow initTable(String tableName, Object object) {
         /**
          * 主键
          */
-         Map<String, PrimaryKeyValueObject> primaryKeyValue = new HashMap<>();
+        Map<String, PrimaryKeyValueObject> primaryKeyValue = new HashMap<String, PrimaryKeyValueObject>();
         /**
          * 属性列
          */
-        Map<String, ColumnValueObject> columnValueObjectMap = new HashMap<>();
+        Map<String, ColumnValueObject> columnValueObjectMap = new HashMap<String, ColumnValueObject>();
 
         String tableEntityName = null;
         try {
             Field[] fields = object.getClass().getDeclaredFields();
             TableEntity tableEntity = object.getClass().getAnnotation(TableEntity.class);
-            if(tableEntity instanceof TableEntity){
+            if (tableEntity instanceof TableEntity) {
                 tableEntityName = tableEntity.name();
-                logger.info("[initTable] tableEntityName :"+tableEntityName);
-            }else {
+                logger.info("[initTable] tableEntityName :" + tableEntityName);
+            } else {
                 logger.info("[initTable] not set tableEntityName ");
             }
-            if(!StringUtils.isBlank(tableName)){
+            if (!StringUtils.isBlank(tableName)) {
                 tableEntityName = tableName;
             }
             for (Field field : fields) {
                 field.setAccessible(true);
                 TableKey annotationTableKey = field.getAnnotation(TableKey.class);
-                if(annotationTableKey != null) {
-                    //主键 主键不可以为空
+                if (annotationTableKey != null) {
+
+                    PrimaryKeyTypeOption option = annotationTableKey.option();
+                    //主键 主键不可以为空，只有在主键自增可以为空
                     String keyName = StringUtils.isBlank(annotationTableKey.name()) ? field.getName() : annotationTableKey.name();
-                    if(field.get(object) == null){
-                        logger.error("[initTable] primary key cannot be null,keyName = "+keyName);
+                    if (field.get(object) == null && option != PrimaryKeyTypeOption.AUTO_INCREMENT) {
+                        logger.error("[initTable] primary key cannot be null,keyName = " + keyName);
                         return null;
                     }
-                    primaryKeyValue.put(keyName,new PrimaryKeyValueObject(field.get(object), annotationTableKey.type(),annotationTableKey.sort()));
+                    primaryKeyValue.put(keyName, new PrimaryKeyValueObject(field.get(object), annotationTableKey.type(), option, annotationTableKey.sort()));
                 }
                 TableColumn annotationTableColumn = field.getAnnotation(TableColumn.class);
-                if(annotationTableColumn != null) {
+                if (annotationTableColumn != null) {
                     //属性列
                     String keyName = StringUtils.isBlank(annotationTableColumn.name()) ? field.getName() : annotationTableColumn.name();
-                    columnValueObjectMap.put(keyName,new ColumnValueObject(field.get(object), annotationTableColumn.type()));
+                    columnValueObjectMap.put(keyName, new ColumnValueObject(field.get(object), annotationTableColumn.type()));
                 }
             }
-        }catch (IllegalAccessException e) {
-            logger.error("[initTable] error :"+ e);
+        } catch (IllegalAccessException e) {
+            logger.error("[initTable] error :" + e);
             return null;
         }
-        if(primaryKeyValue.isEmpty()){
+        if (primaryKeyValue.isEmpty()) {
             logger.error("[initTable] primary key none");
             return null;
         }
